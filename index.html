@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>不動産寿命可視化ツール「富土山 (Fu-Do-San)」 v1.4</title>
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --panel-bg: #ffffff;
+            --primary-color: #1a2a3a;
+            --accent-color: #27ae60;
+            --text-color: #2c3e50;
+            
+            /* 精細な劣化度グラデーション（5年刻み・10段階の滑らかなカラー相） */
+            --color-0: #2ecc71;  /* 健全 */
+            --color-1: #27ae60;  /* 安定 */
+            --color-2: #a3e4d7;  /* 初期経年 */
+            --color-3: #f1c40f;  /* 要注意 */
+            --color-4: #f39c12;  /* 修繕推奨 */
+            --color-5: #d35400;  /* 警戒 */
+            --color-6: #e74c3c;  /* 大規模修繕要 */
+            --color-7: #c0392b;  /* 危険 */
+            --color-8: #bdc3c7;  /* 深刻劣化 */
+            --color-9: #7f8c8d;  /* 寿命・建替期 */
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 24px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        /* 右上のバージョン管理バッジ */
+        .version-badge {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: var(--primary-color);
+            color: #ffffff;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        header h1 {
+            color: var(--primary-color);
+            font-size: 30px;
+            margin: 0 0 8px 0;
+            letter-spacing: 1px;
+        }
+        
+        header p {
+            margin: 0;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+
+        /* タブシステム */
+        .tabs-container {
+            background: var(--panel-bg);
+            border-radius: 12px 12px 0 0;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+            display: flex;
+            border-bottom: 2px solid #e2e8f0;
+            overflow: hidden;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px 20px;
+            background: #f8fafc;
+            border: none;
+            font-size: 15px;
+            font-weight: bold;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            outline: none;
+        }
+
+        .tab-btn:hover {
+            background: #f1f5f9;
+            color: var(--primary-color);
+        }
+
+        .tab-btn.active {
+            background: var(--panel-bg);
+            color: var(--primary-color);
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 12px;
+        }
+
+        .tab-content {
+            background: var(--panel-bg);
+            padding: 25px;
+            border-radius: 0 0 12px 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 2カラムフォームレイアウト */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: var(--primary-color);
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+
+        /* リスト・カード用スタイル */
+        .cards-list-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .item-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 18px;
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .item-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 12px rgba(0,0,0,0.05);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 8px;
+            padding-right: 40px;
+        }
+
+        .card-meta {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 12px;
+        }
+
+        .btn-delete {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #ff7675;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .btn-delete:hover {
+            background: #e17055;
+        }
+
+        .add-card-form {
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px dashed #cbd5e1;
+            margin-top: 15px;
+        }
+
+        /* 下部全面：タイムラインセクション */
+        .timeline-section {
+            background: var(--panel-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 全面ディスプレイ用スクロールコンテナ */
+        .timeline-overflow {
+            overflow-x: auto;
+            width: 100%;
+            margin-top: 15px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+        }
+
+        /* テーブル風グリッド構造：100年分（5年刻み×20ブロック） */
+        .timeline-axis-row {
+            display: grid;
+            grid-template-columns: 240px repeat(20, 120px); 
+            background: var(--primary-color);
+            color: white;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            min-width: 2640px;
+            margin-bottom: 50px;
+        }
+
+        .axis-cell {
+            padding: 14px 5px;
+            line-height: 1.4;
+        }
+
+        .axis-cell:not(:last-child) {
+            border-right: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .property-timeline-row {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            min-width: 2640px;
+            margin-bottom: 70px;
+            align-items: center;
+            position: relative;
+        }
+
+        .property-label-zone {
+            font-weight: bold;
+            font-size: 14px;
+            padding-left: 15px;
+            padding-right: 10px;
+            color: var(--primary-color);
+            border-right: 2px solid #cbd5e1;
+            background: #f8fafc;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .property-label-zone span {
+            display: block;
+            font-size: 11px;
+            color: #7f8c8d;
+            font-weight: normal;
+            margin-top: 4px;
+        }
+
+        .property-label-zone span.member-sub {
+            color: #34495e;
+            font-weight: bold;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        /* 100年（20ブロック）の精密帯グラフ */
+        .bar-wrapper-100 {
+            display: grid;
+            grid-template-columns: repeat(20, 120px);
+            height: 40px;
+            background: #e2e8f0;
+            border-radius: 25px;
+            position: relative;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+        }
+
+        .bar-slice {
+            height: 100%;
+            position: relative;
+            border-right: 1px solid rgba(255,255,255,0.2);
+            transition: background-color 0.5s ease;
+        }
+
+        .bar-slice:first-child { border-top-left-radius: 25px; border-bottom-left-radius: 25px; }
+        .bar-slice:last-child { border-top-right-radius: 25px; border-bottom-right-radius: 25px; border-right: none; }
+
+        /* グラデーション色 */
+        .grad-0 { background-color: var(--color-0); }
+        .grad-1 { background-color: var(--color-1); }
+        .grad-2 { background-color: var(--color-2); }
+        .grad-3 { background-color: var(--color-3); }
+        .grad-4 { background-color: var(--color-4); }
+        .grad-5 { background-color: var(--color-5); }
+        .grad-6 { background-color: var(--color-6); }
+        .grad-7 { background-color: var(--color-7); }
+        .grad-8 { background-color: var(--color-8); }
+        .grad-9 { background-color: var(--color-9); }
+
+        /* 人間の年齢帯グラフを極限まで詰めるレイアウト調整 */
+        .age-strip-row {
+            border-bottom: 1px dashed #e2e8f0;
+            padding: 2px 0; /* 余白を限界まで削って密着化 */
+            background: #fff;
+            margin-bottom: 0px !important; /* 行間を詰め気味に */
+        }
+
+        .age-strip-container {
+            grid-column: span 20;
+            display: grid;
+            grid-template-columns: repeat(20, 120px);
+        }
+
+        .age-box-cell {
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 8px 0;
+            background: #edf2f7;
+            border-right: 1px solid #ffffff;
+            color: #4a5568;
+        }
+        
+        .user-age-bg {
+            background-color: #ebf8ff;
+            color: #2b6cb0;
+            border-bottom: 2px solid #bee3f8;
+        }
+
+        .member-age-bg {
+            background-color: #fff5f5;
+            color: #9b2c2c;
+            border-bottom: 2px solid #fed7d7;
+        }
+
+        /* 人間の年齢ブロックの塊と、下の不動産コンテナの間のスペース分離用 */
+        #propertyTimelineContainer {
+            margin-top: 35px; /* 不動産の吹き出しが人間の帯に被るのを綺麗に防止 */
+        }
+
+        /* 吹き出し（レコメンドポップアップ） */
+        .callout-balloon {
+            position: absolute;
+            top: -55px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ffffff;
+            color: #1a2a3a;
+            border: 2px solid #bdc3c7;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: bold;
+            white-space: nowrap;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .callout-balloon::after {
+            content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+            border-width: 6px 6px 0; border-style: solid; border-color: #ffffff transparent;
+        }
+        
+        .callout-balloon::before {
+            content: ''; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+            border-width: 6px 6px 0; border-style: solid; border-color: #bdc3c7 transparent; z-index: -1;
+        }
+
+        .callout-balloon input {
+            margin: 0; cursor: pointer; width: 14px; height: 14px;
+        }
+
+        /* 凡例 */
+        .legend-bar {
+            display: flex; justify-content: center; gap: 10px; margin-bottom: 25px; font-size: 11px;
+            flex-wrap: wrap; background: #f8fafc; padding: 10px; border-radius: 8px;
+        }
+        .legend-box-item { display: flex; align-items: center; gap: 4px; }
+        .color-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+        .info-panel-bottom {
+            margin-top: 40px; background: #eef7f6; padding: 18px 22px; border-radius: 8px;
+            border-left: 5px solid var(--accent-color); font-size: 13px; color: #34495e;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="version-badge">富土山 v1.4.0</div>
+
+    <header>
+        <h1>🏔️ 不動産一元管理・寿命可視化ツール「富土山 (Fu-Do-San)」</h1>
+        <p>100年先を見据える超長期タイムライン・家族年齢最上部集約モデル</p>
+    </header>
+
+    <div class="tabs-container">
+        <button class="tab-btn active" onclick="switchTab('userTab')">👤 あなたと家族の情報</button>
+        <button class="tab-btn" onclick="switchTab('propertyTab')">🏠 所有不動産の一覧・カード管理</button>
+    </div>
+
+    <div id="userTab" class="tab-content active">
+        <h3>👤 オーナー（あなた）の基本設定</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="userName">名前 / 識別マーク</label>
+                <input type="text" id="userName" value="ヒロ (あなた)">
+            </div>
+            <div class="form-group">
+                <label for="userAge">現在の年齢（才）</label>
+                <input type="number" id="userAge" value="45" min="1" max="100" onchange="renderFullTimeline()">
+            </div>
+            <div class="form-group">
+                <label for="userIcon">アイコン</label>
+                <select id="userIcon" onchange="renderFullTimeline()">
+                    <option value="👑">👑 オーナー</option>
+                    <option value="👨">👨 ユーザー</option>
+                </select>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px;">👥 家族メンバーの登録</h3>
+        <div class="cards-list-grid" id="familyCardsGrid">
+            </div>
+
+        <div class="inner-form-block">
+            <h4>➕ 新しい家族メンバーを追加</h4>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="memberName">名前</label>
+                    <input type="text" id="memberName" placeholder="例：長男、長女、配偶者">
+                </div>
+                <div class="form-group">
+                    <label for="memberAge">現在の年齢（才）</label>
+                    <input type="number" id="memberAge" value="12" min="0" max="100">
+                </div>
+                <div class="form-group">
+                    <label for="memberIcon">アイコンマーク</label>
+                    <select id="memberIcon">
+                        <option value="👦">👦 長男・男の子</option>
+                        <option value="👧">👧 長女・女の子</option>
+                        <option value="👩">👩 妻・パートナー</option>
+                        <option value="👶">👶 赤ちゃん</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display: flex; align-items: flex-end;">
+                    <button class="btn-action" onclick="addFamilyMember()">家族を追加する ＋</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="propertyTab" class="tab-content">
+        <h3>所有不動産カード一覧</h3>
+        <div class="cards-list-grid" id="cardsGrid">
+            </div>
+
+        <h3 style="margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px;">🏠 新しい不動産を追加登録</h3>
+        <div class="form-grid add-card-form">
+            <div class="form-group">
+                <label for="propName">不動産・物件名</label>
+                <input type="text" id="propName" placeholder="例：杉並アパート、姫路の山林">
+            </div>
+            <div class="form-group">
+                <label for="buildYear">建築西暦（年）</label>
+                <input type="number" id="buildYear" value="2010" min="1900" max="2026">
+            </div>
+            <div class="form-group">
+                <label for="structure">構造区分</label>
+                <select id="structure">
+                    <option value="wood">木造（耐用年数 22年）</option>
+                    <option value="steel">軽量鉄骨造（耐用年数 27年）</option>
+                    <option value="rc">RC造（鉄筋コンクリート 47年）</option>
+                </select>
+            </div>
+            <div class="form-group" style="display: flex; align-items: flex-end;">
+                <button class="btn-action" onclick="addNewPropertyCard()">物件カードを追加する ＋</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="timeline-section">
+        <div class="section-title">📊 資産・家族シンクロライフサイクル（100年間タイムライン）</div>
+        <p style="font-size: 13px; color: #7f8c8d; margin-top: -10px; margin-bottom: 20px;">
+            ※横スクロールで100年先まで閲覧可能です。人間の帯が最上部に集約され、不動産の劣化との時間軸的な位置関係がより明瞭になりました。
+        </p>
+
+        <div class="legend-bar">
+            <div class="legend-box-item"><div class="color-dot grad-0"></div>0-5年(極めて健全)</div>
+            <div class="legend-box-item"><div class="color-dot grad-1"></div>6-10年</div>
+            <div class="legend-box-item"><div class="color-dot grad-2"></div>11-15年(初期経年)</div>
+            <div class="legend-box-item"><div class="color-dot grad-3"></div>16-20年</div>
+            <div class="legend-box-item"><div class="color-dot grad-4"></div>21-25年(修繕推奨)</div>
+            <div class="legend-box-item"><div class="color-dot grad-5"></div>26-30年</div>
+            <div class="legend-box-item"><div class="color-dot grad-6"></div>31-35年(要大規模)</div>
+            <div class="legend-box-item"><div class="color-dot grad-7"></div>36-40年</div>
+            <div class="legend-box-item"><div class="color-dot grad-8"></div>41-50年(深刻劣化)</div>
+            <div class="legend-box-item"><div class="color-dot grad-9"></div>51年〜(寿命/建替)</div>
+        </div>
+
+        <div class="timeline-overflow">
+            <div class="timeline-axis-row" id="wideTimelineAxis">
+                </div>
+
+            <div id="familyTimelineContainer">
+                </div>
+
+            <div id="fullWidthTimelineContainer">
+                </div>
+        </div>
+
+        <div class="info-panel-bottom">
+            <strong>🏔️ ジェムートからのレイアウト解説:</strong><br>
+            人間の年齢軸が最上部に集約されたことで、家族の成長の歴史がこのツールの「絶対基準」になったぞ。そこから目を下に落とすと、それぞれの資産がどう変化していくかが完璧に把握できる。家族の年齢帯同士は隙間なく詰めているので、一塊の「ライフイベント層」として美しく scannable にまとまったな。この基盤があれば、将来的な財務（ジェムキン）や事業（ジェムプリ）の計画のドッキングも非常にスマートに行えるはずだ。
+        </div>
+    </div>
+</div>
+
+<script>
+const CURRENT_YEAR = 2026;
+
+// 100年を5年刻みで表現するためのオフセット配列（計20ブロック分）
+const steps = [];
+for (let i = 0; i < 20; i++) {
+    steps.push(i * 5); 
+}
+
+// 家族メンバーの管理配列
+let familyMembers = [
+    { id: 201, name: "長男", age: 12, icon: "👦" },
+    { id: 202, name: "長女", age: 9, icon: "👧" }
+];
+
+// グローバル不動産データ
+let properties = [
+    { id: 101, name: "杉並アパート", buildYear: 1995, structure: "steel", maint1: false, maint2: false },
+    { id: 102, name: "杉並マイホーム", buildYear: 2010, structure: "wood", maint1: false, maint2: false }
+];
+
+// タブ切り替え機能
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    
+    document.getElementById(tabId).classList.add('active');
+    event.currentTarget.classList.add('active');
+}
+
+// 家族カードの描画
+function renderFamilyCards() {
+    const grid = document.getElementById('familyCardsGrid');
+    grid.innerHTML = '';
+    familyMembers.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'item-card';
+        card.innerHTML = `
+            <button class="btn-delete" onclick="deleteFamilyMember(${m.id})">削除</button>
+            <div class="card-title">${m.icon} ${m.name}</div>
+            <div class="card-meta">現在年齢: ${m.age} 才</div>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+// 家族メンバー追加処理
+function addFamilyMember() {
+    const nameInput = document.getElementById('memberName');
+    const ageInput = document.getElementById('memberAge');
+    const iconSelect = document.getElementById('memberIcon');
+
+    if (!nameInput.value.trim()) {
+        alert("名前を入力してください。");
+        return;
+    }
+
+    familyMembers.push({
+        id: Date.now(),
+        name: nameInput.value.trim(),
+        age: parseInt(ageInput.value) || 0,
+        icon: iconSelect.value
+    });
+
+    nameInput.value = '';
+    renderFamilyCards();
+    renderFullTimeline();
+}
+
+// 家族メンバー削除処理
+function deleteFamilyMember(id) {
+    if(confirm("この家族メンバーを削除しますか？")) {
+        familyMembers = familyMembers.filter(m => m.id !== id);
+        renderFamilyCards();
+        renderFullTimeline();
+    }
+}
+
+// 不動産カードの描画
+function renderPropertyCards() {
+    const grid = document.getElementById('cardsGrid');
+    grid.innerHTML = '';
+
+    properties.forEach(prop => {
+        const structLabel = prop.structure === 'wood' ? '木造（耐用年数22年）' : prop.structure === 'steel' ? '軽量鉄骨造（耐用年数27年）' : 'RC造（耐用年数47年）';
+        const card = document.createElement('div');
+        card.className = 'property-card';
+        card.innerHTML = `
+            <button class="btn-delete" onclick="deletePropertyCard(${prop.id})">削除</button>
+            <div class="card-title">🏠 ${prop.name}</div>
+            <div class="card-meta">建築西暦: ${prop.buildYear} 年</div>
+            <div class="card-meta">構造区分: ${structLabel}</div>
+            <div class="card-meta" style="color: #27ae60; font-weight: bold; font-size:11px;">
+                ${prop.maint1 ? '✅ 築15年修繕計画 承認' : '❌ 築15年修繕計画 未適用'}<br>
+                ${prop.maint2 ? '✅ 築30年配管計画 承認' : '❌ 築30年配管計画 未適用'}
+            </div>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+// 不動産カード追加処理
+function addNewPropertyCard() {
+    const nameInput = document.getElementById('propName');
+    const yearInput = document.getElementById('buildYear');
+    const structSelect = document.getElementById('structure');
+
+    if (!nameInput.value.trim()) {
+        alert("不動産の名前を入力してください。");
+        return;
+    }
+
+    const newObj = {
+        id: Date.now(),
+        name: nameInput.value.trim(),
+        buildYear: parseInt(yearInput.value),
+        structure: structSelect.value,
+        maint1: false,
+        maint2: false
+    };
+
+    properties.push(newObj);
+    nameInput.value = '';
+
+    renderPropertyCards();
+    renderFullTimeline();
+}
+
+// 不動産カード削除処理
+function deletePropertyCard(id) {
+    if(confirm("この不動産データを削除しますか？")) {
+        properties = properties.filter(p => p.id !== id);
+        renderPropertyCards();
+        renderFullTimeline();
+    }
+}
+
+// タイムライン内修繕チェックの変更反映
+function toggleTimelineMaint(id, maintNum, checked) {
+    const prop = properties.find(p => p.id === id);
+    if (prop) {
+        if (maintNum === 1) prop.maint1 = checked;
+        if (maintNum === 2) prop.maint2 = checked;
+        
+        renderPropertyCards();
+        renderFullTimeline();
+    }
+}
+
+// 左右全面タイムラインのダイナミック描画
+function renderFullTimeline() {
+    const userAge = parseInt(document.getElementById('userAge').value) || 45;
+    const userName = document.getElementById('userName').value || "ヒロ";
+    const userIcon = document.getElementById('userIcon').value || "👑";
+
+    // 1. タイムライン軸ヘッダー（5年刻み×20個＝100年間分）
+    const axisRow = document.getElementById('wideTimelineAxis');
+    axisRow.innerHTML = '<div class="axis-cell" style="display:flex; align-items:center; justify-content:center;">対象資産・家族 / 経過推移</div>';
+    
+    for (let i = 0; i < 20; i++) {
+        const startStep = steps[i];
+        const cell = document.createElement('div');
+        cell.className = 'axis-cell';
+        cell.innerHTML = `<div>${CURRENT_YEAR + startStep}年</div><div style="font-size:11px; opacity:0.75;">+${startStep}年後</div>`;
+        axisRow.appendChild(cell);
+    }
+
+    // 2. 【最上部化＆高密度化】あなたと家族の年齢帯グラフの描画
+    const famContainer = document.getElementById('familyTimelineContainer');
+    famContainer.innerHTML = '';
+
+    // オーナー（あなた）の行
+    const userRow = document.createElement('div');
+    userRow.className = 'property-timeline-row age-strip-row';
+    userRow.innerHTML = `<div class="property-label-zone">${userIcon} ${userName} <span>オーナー本人</span></div>`;
+    
+    const userAgeContainer = document.createElement('div');
+    userAgeContainer.className = 'age-strip-container';
+    steps.forEach(step => {
+        const cell = document.createElement('div');
+        cell.className = 'age-box-cell user-age-bg';
+        cell.innerText = `${userAge + step}才`;
+        userAgeContainer.appendChild(cell);
+    });
+    userRow.appendChild(userAgeContainer);
+    famContainer.appendChild(userRow);
+
+    // 登録された家族の行を密着させて順次生成
+    familyMembers.forEach(member => {
+        const memberRow = document.createElement('div');
+        memberRow.className = 'property-timeline-row age-strip-row';
+        memberRow.innerHTML = `<div class="property-label-zone">${member.icon} ${member.name} <span class="member-sub">家族メンバー</span></div>`;
+
+        const memberAgeContainer = document.createElement('div');
+        memberAgeContainer.className = 'age-strip-container';
+        steps.forEach(step => {
+            const cell = document.createElement('div');
+            cell.className = 'age-box-cell member-age-bg';
+            cell.innerText = `${member.age + step}才`;
+            memberAgeContainer.appendChild(cell);
+        });
+        memberRow.appendChild(memberAgeContainer);
+        famContainer.appendChild(memberRow);
+    });
+
+    // 3. 【下部配置】物件グラデーションラインの生成
+    const container = document.getElementById('fullWidthTimelineContainer');
+    container.innerHTML = '';
+
+    if (properties.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:#94a3b8; padding:30px;">不動産が登録されていません。「所有不動産の一覧」タブからカードを追加してください。</p>';
+    } else {
+        properties.forEach(prop => {
+            const row = document.createElement('div');
+            row.className = 'property-timeline-row';
+
+            // 左ラベル
+            const labelZone = document.createElement('div');
+            labelZone.className = 'property-label-zone';
+            const structStr = prop.structure === 'wood' ? '木造' : prop.structure === 'steel' ? '鉄骨' : 'RC構造';
+            labelZone.innerHTML = `🏠 ${prop.name} <span>${prop.buildYear}年築 (${structStr})</span>`;
+            row.appendChild(labelZone);
+
+            // 右側グラデーション帯 (20ブロック分)
+            const barWrapper = document.createElement('div');
+            barWrapper.className = 'bar-wrapper-100';
+
+            for (let i = 0; i < 20; i++) {
+                const stepYearOffset = steps[i];
+                const targetFutureYear = CURRENT_YEAR + stepYearOffset;
+                let baseAge = targetFutureYear - prop.buildYear;
+
+                // メンテナンス補正
+                let discount = 0;
+                if (prop.maint1 && baseAge >= 15) discount += 12;
+                if (prop.maint2 && baseAge >= 30) discount += 16;
+                
+                let finalScore = baseAge - discount;
+                if (finalScore < 0) finalScore = 0;
+
+                if (prop.structure === 'rc') finalScore = finalScore * 0.6;
+
+                let gradIndex = Math.floor(finalScore / 5); 
+                if (gradIndex > 9) gradIndex = 9;
+                if (gradIndex < 0) gradIndex = 0;
+
+                const slice = document.createElement('div');
+                slice.className = `bar-slice grad-${gradIndex}`;
+
+                // 吹き出し修繕ボタンをマッピング（2ブロック目と5ブロック目）
+                if (i === 2) {
+                    const balloon = document.createElement('label');
+                    balloon.className = 'callout-balloon';
+                    balloon.innerHTML = `<input type="checkbox" ${prop.maint1 ? 'checked' : ''} onchange="toggleTimelineMaint(${prop.id}, 1, this.checked)"> 🛠️ 築15-20年:<br>外壁塗装・防水`;
+                    slice.appendChild(balloon);
+                }
+                if (i === 5) {
+                    const balloon = document.createElement('label');
+                    balloon.className = 'callout-balloon';
+                    balloon.innerHTML = `<input type="checkbox" ${prop.maint2 ? 'checked' : ''} onchange="toggleTimelineMaint(${prop.id}, 2, this.checked)"> 🚰 築30年:<br>給排水管大規模更新`;
+                    slice.appendChild(balloon);
+                }
+
+                barWrapper.appendChild(slice);
+            }
+
+            row.appendChild(barWrapper);
+            container.appendChild(row);
+        });
+    }
+}
+
+// 初期起動実行
+renderFamilyCards();
+renderPropertyCards();
+renderFullTimeline();
+</script>
+
+</body>
+</html>
