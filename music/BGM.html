@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>富土山テーマBGM - 連携専用・UIレス【v3】</title>
+</head>
+<body>
+<!-- 連携専用のため表示要素（UI）は一切ありません -->
+<script>
+let audioCtx = null;
+let isPlaying = false;
+let nextNoteTime = 0.0;
+let timerId = null;
+
+const tempo = 122; 
+const secondsPerBeat = 60.0 / tempo;
+const noteLength = secondsPerBeat * 0.5; 
+
+const melody = [
+    67, 67, 69, 67, 0,  64, 60, 64, 
+    62, 62, 64, 62, 0,  0,  0,  0,
+    67, 67, 69, 67, 0,  72, 69, 72,
+    67, 0,  64, 0,  60, 0,  0,  0
+];
+
+const bassline = [
+    48, 48, 55, 55, 48, 48, 55, 55,
+    50, 50, 57, 57, 50, 50, 57, 57,
+    48, 48, 55, 55, 48, 48, 55, 55,
+    55, 55, 50, 50, 48, 52, 55, 48
+];
+
+let currentStep = 0;
+
+function initAudio() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playNoise(time) {
+    if (!audioCtx) return;
+    let bufferSize = audioCtx.sampleRate * 0.05;
+    let buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    let data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+    let noise = audioCtx.createBufferSource(buffer);
+    let filter = audioCtx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(7000, time);
+
+    let gain = audioCtx.createGain();
+    // ボリューム50%
+    gain.gain.setValueAtTime(0.015, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start(time);
+}
+
+function playTone(freq, type, startTime, duration, vol, detuneVal = 0) {
+    if (freq === 0) return;
+    
+    let osc = audioCtx.createOscillator();
+    let gainNode = audioCtx.createGain();
+    
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+    if (detuneVal !== 0) {
+        osc.detune.setValueAtTime(detuneVal, startTime);
+    }
+    
+    if (type === 'sine') {
+        osc.frequency.linearRampToValueAtTime(freq * 1.02, startTime + duration * 0.5);
+        osc.frequency.linearRampToValueAtTime(freq * 0.98, startTime + duration);
+    }
+
+    gainNode.gain.setValueAtTime(vol, startTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration - 0.01);
+    
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+}
+
+function mtof(note) {
+    if (note === 0) return 0;
+    return 440 * Math.pow(2, (note - 69) / 12);
+}
+
+function scheduler() {
+    while (nextNoteTime < audioCtx.currentTime + 0.1) {
+        scheduleNote(currentStep, nextNoteTime);
+        nextNoteTime += noteLength;
+        currentStep = (currentStep + 1) % 32;
+    }
+    timerId = setTimeout(scheduler, 25);
+}
+
+function scheduleNote(step, time) {
+    let melNote = melody[step];
+    if (melNote > 0) {
+        playTone(mtof(melNote), 'sine', time, noteLength * 0.9, 0.075);
+        playTone(mtof(melNote) * 2, 'triangle', time, noteLength * 0.4, 0.025);
+    }
+
+    let bassNote = bassline[step];
+    if (step % 2 === 0 && bassNote > 0) {
+        playTone(mtof(bassNote - 12), 'square', time, noteLength * 1.8, 0.06);
+    }
+
+    if (step % 4 === 0) {
+        playTone(80, 'triangle', time, 0.15, 0.15);
+    }
+    if (step % 2 === 1) {
+        playNoise(time);
+    }
+}
+
+// 外部連携用グローバル関数（UI非依存）
+window.playBGM = function() {
+    if (!audioCtx) initAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    if (!isPlaying) {
+        isPlaying = true;
+        currentStep = 0;
+        nextNoteTime = audioCtx.currentTime + 0.05;
+        scheduler();
+    }
+};
+
+window.stopBGM = function() {
+    if (isPlaying) {
+        isPlaying = false;
+        clearTimeout(timerId);
+        if (audioCtx) audioCtx.suspend();
+    }
+};
+
+// メッセージイベント連携
+window.addEventListener('message', (event) => {
+    if (event.data === 'play') {
+        window.playBGM();
+    } else if (event.data === 'stop') {
+        window.stopBGM();
+    }
+});
+</script>
+</body>
+</html>
